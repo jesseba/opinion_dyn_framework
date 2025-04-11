@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 from model import OpinionDynamicsModel, SUPPORTER, UNDECIDED, OPPOSITION
 from networks import create_scale_free_network, create_small_world_network, create_random_network
+import matplotlib.pyplot as plt
 
 def run_grassroots_vs_establishment_experiment(
     n_nodes=1000, 
@@ -58,7 +59,8 @@ def run_grassroots_vs_establishment_experiment(
                 'supporter_final': [],
                 'undecided_final': [],
                 'opposition_final': [],
-                'history': []
+                'history': [],
+                'all_histories': []  # Add storage for all trial histories
             } for strategy in strategies
         } for network_type in network_types
     }
@@ -116,9 +118,13 @@ def run_grassroots_vs_establishment_experiment(
                 results[network_type][strategy_name]['undecided_final'].append(final_props[UNDECIDED])
                 results[network_type][strategy_name]['opposition_final'].append(final_props[OPPOSITION])
                 
-                # Store full history for one representative trial
+                # Store history for this trial
+                history = model.get_history_proportions()
+                results[network_type][strategy_name]['all_histories'].append(history)
+                
+                # Store full history for all representative trial
                 if trial == 0:
-                    results[network_type][strategy_name]['history'] = model.get_history_proportions()
+                    results[network_type][strategy_name]['history'] = history
     
     return results
 
@@ -652,4 +658,66 @@ def run_blitz_vs_sustained_experiment(
                                 slope = np.polyfit(times, post_peak, 1)[0]
                                 results[network_name][pattern_name]['supporter_decay_rate'].append(slope)
     
-    return results 
+    return results
+
+# fig2, axes2 = plt.subplots(len(network_types), len(strategies), figsize=(16, 12))
+
+# # Add shock period indicator
+# shock_start = 10
+# shock_end = 10 + 20  # shock_duration
+
+# for i, network_type in enumerate(network_types):
+#     for j, strategy in enumerate(strategies):
+#         ax = axes2[i, j]
+        
+#         if 'all_histories' in results[network_type][strategy] and len(results[network_type][strategy]['all_histories']) > 0:
+#             # Get all histories for this network type and strategy
+#             all_histories = results[network_type][strategy]['all_histories']
+            
+#             # Calculate mean and std for each time step
+#             num_steps = len(all_histories[0])
+#             supporters_data = np.zeros((len(all_histories), num_steps))
+#             undecided_data = np.zeros_like(supporters_data)
+#             opposition_data = np.zeros_like(supporters_data)
+            
+#             # Collect data from all trials
+#             for k, hist in enumerate(all_histories):
+#                 if len(hist) == num_steps:  # Ensure same length
+#                     supporters_data[k] = [h[SUPPORTER] for h in hist]
+#                     undecided_data[k] = [h[UNDECIDED] for h in hist]
+#                     opposition_data[k] = [h[OPPOSITION] for h in hist]
+            
+#             # Calculate means and standard deviations
+#             supporters_mean = np.mean(supporters_data, axis=0)
+#             supporters_std = np.std(supporters_data, axis=0)
+#             undecided_mean = np.mean(undecided_data, axis=0)
+#             undecided_std = np.std(undecided_data, axis=0)
+#             opposition_mean = np.mean(opposition_data, axis=0)
+#             opposition_std = np.std(opposition_data, axis=0)
+            
+#             steps = range(num_steps)
+            
+#             # Plot means
+#             ax.plot(steps, supporters_mean, '-', color=SUPPORTER_COLOR, linewidth=2.5, label='Supporters')
+#             ax.plot(steps, undecided_mean, '-', color=UNDECIDED_COLOR, linewidth=2.5, label='Undecided')
+#             ax.plot(steps, opposition_mean, '-', color=OPPOSITION_COLOR, linewidth=2.5, label='Opposition')
+            
+#             # Add confidence intervals
+#             ax.fill_between(steps, 
+#                            supporters_mean - supporters_std, 
+#                            supporters_mean + supporters_std, 
+#                            color=SUPPORTER_COLOR, alpha=0.2)
+#             ax.fill_between(steps, 
+#                            undecided_mean - undecided_std, 
+#                            undecided_mean + undecided_std, 
+#                            color=UNDECIDED_COLOR, alpha=0.2)
+#             ax.fill_between(steps, 
+#                            opposition_mean - opposition_std, 
+#                            opposition_mean + opposition_std, 
+#                            color=OPPOSITION_COLOR, alpha=0.2)
+            
+#             # Highlight the shock period with better styling
+#             ax.axvspan(shock_start, shock_end, alpha=0.15, color='gray', edgecolor='none')
+            
+#             # Add styling as in the previous code...
+#             # [Additional styling code here] 
