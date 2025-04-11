@@ -2,7 +2,7 @@ import os
 import json
 import pickle
 import datetime
-from src.model import SUPPORTER, UNDECIDED, OPPOSITION
+from model import SUPPORTER, UNDECIDED, OPPOSITION
 import numpy as np
 
 def save_experiment_results(experiment_name, results, config, output_dir="results"):

@@ -113,10 +113,10 @@ class OpinionDynamicsModel:
         self.node_lambda_s[high_degree_nodes] *= lambda_s_factor
         self.node_lambda_o[high_degree_nodes] *= lambda_o_factor
         
-        # Enhanced: reduce stubbornness of targeted high-degree nodes to make them more persuasive
+        # reduce stubbornness of targeted high-degree nodes to make them more persuasive
         self.stubbornness[high_degree_nodes] *= 0.3  # More dramatic reduction
         
-        # Enhanced: increase opinion strength of these influencers
+        # increase opinion strength of these influencers
         self.opinion_strength[high_degree_nodes] = np.minimum(self.opinion_strength[high_degree_nodes] * 2.0, 1.0)
         
         # Reset time in state for shocked nodes to make them more immediately influential
@@ -129,7 +129,7 @@ class OpinionDynamicsModel:
             convert_nodes = np.random.choice(undecided_high_degree, convert_count, replace=False)
             self.states[convert_nodes] = SUPPORTER
         
-        # Critical for dynamics: also reduce stubbornness of nodes connected to high-degree nodes
+        # also reduce stubbornness of nodes connected to high-degree nodes
         # This creates a ripple effect from the shock
         for node in high_degree_nodes:
             neighbors = list(self.network.neighbors(node))
@@ -179,10 +179,10 @@ class OpinionDynamicsModel:
         self.node_lambda_s[targeted_nodes] *= lambda_s_factor
         self.node_lambda_o[targeted_nodes] *= lambda_o_factor
         
-        # Enhanced: slightly reduce stubbornness of targeted random nodes
+        # slightly reduce stubbornness of targeted random nodes
         self.stubbornness[targeted_nodes] *= 0.5  # More significant reduction
         
-        # Enhanced: increase opinion strength of these grassroots campaigners
+        # increase opinion strength of these grassroots campaigners
         self.opinion_strength[targeted_nodes] = np.minimum(self.opinion_strength[targeted_nodes] * 1.5, 1.0)
         
         # Reset time in state to make opinions more malleable
@@ -265,7 +265,7 @@ class OpinionDynamicsModel:
             base_s_prob = self.node_lambda_s[i]
             base_o_prob = self.node_lambda_o[i]
             
-            # Critical point dynamics: make transitions more likely when opinions are balanced
+            # make transitions more likely when opinions are balanced
             # This creates more interesting dynamics near 50-50 splits
             balance_effect = 1.0 + 0.5 * (4 * p_supporter * p_opposition)  # Maximum at 50/50 split
             

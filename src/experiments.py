@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
-from src.model import OpinionDynamicsModel, SUPPORTER, UNDECIDED, OPPOSITION
-from src.networks import create_scale_free_network, create_small_world_network, create_random_network
+from model import OpinionDynamicsModel, SUPPORTER, UNDECIDED, OPPOSITION
+from networks import create_scale_free_network, create_small_world_network, create_random_network
 
 def run_grassroots_vs_establishment_experiment(
     n_nodes=1000, 

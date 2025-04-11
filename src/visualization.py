@@ -5,7 +5,7 @@ from matplotlib.gridspec import GridSpec
 import seaborn as sns
 import os
 from matplotlib.patches import Patch
-from src.model import SUPPORTER, UNDECIDED, OPPOSITION, SUPPORTER_COLOR, UNDECIDED_COLOR, OPPOSITION_COLOR, COLOR_PALETTE
+from model import SUPPORTER, UNDECIDED, OPPOSITION, SUPPORTER_COLOR, UNDECIDED_COLOR, OPPOSITION_COLOR, COLOR_PALETTE
 
 # Set professional style for plots
 plt.style.use('seaborn-v0_8-whitegrid')

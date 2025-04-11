@@ -8,15 +8,15 @@ import os
 import json
 
 # Import from other modules
-from src.model import SUPPORTER, UNDECIDED, OPPOSITION
-from src.experiments import (
+from model import SUPPORTER, UNDECIDED, OPPOSITION
+from experiments import (
     run_grassroots_vs_establishment_experiment,
     run_network_battleground_experiment,
     run_timing_experiment,
     run_intervention_pattern_experiment,
     run_blitz_vs_sustained_experiment
 )
-from src.utils import save_experiment_results, load_experiment_results, find_experiment_results
+from utils import save_experiment_results, load_experiment_results, find_experiment_results
 
 # Set better visualization styles
 plt.style.use('seaborn-v0_8-whitegrid')
