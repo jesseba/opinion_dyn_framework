@@ -1,0 +1,32 @@
+{
+  "config": {
+    "n_nodes": 1000,
+    "total_steps": 150,
+    "num_trials": 5,
+    "lambda_s": 0.12,
+    "lambda_o": 0.12,
+    "initial_supporter_range": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.39999999999999997,
+      0.44999999999999996,
+      0.49999999999999994,
+      0.5499999999999999,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.7999999999999999,
+      0.85,
+      0.9,
+      0.95
+    ]
+  },
+  "filepath": "../results/critical_mass/critical_mass_20250411_223415_n_nodes_1000_total_steps_150.pkl",
+  "timestamp": "mass"
+}

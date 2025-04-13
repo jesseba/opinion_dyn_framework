@@ -1,0 +1,29 @@
+{
+  "config": {
+    "n_nodes": 1000,
+    "total_steps": 150,
+    "num_trials": 5,
+    "lambda_s": 0.12,
+    "lambda_o": 0.12,
+    "initial_supporter_percent": 0.3,
+    "undecided_ratio_range": [
+      0.0,
+      0.07142857142857142,
+      0.14285714285714285,
+      0.21428571428571427,
+      0.2857142857142857,
+      0.3571428571428571,
+      0.42857142857142855,
+      0.5,
+      0.5714285714285714,
+      0.6428571428571428,
+      0.7142857142857142,
+      0.7857142857142857,
+      0.8571428571428571,
+      0.9285714285714285,
+      1.0
+    ]
+  },
+  "filepath": "../results/opponent_composition/opponent_composition_20250413_113902_n_nodes_1000_total_steps_150.pkl",
+  "timestamp": "composition"
+}

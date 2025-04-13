@@ -1,0 +1,4 @@
+Network Type,Max Supporter Gain,Optimal Undecided Ratio,Crossover Points
+Scale Free,0.674,1.00,0.18
+Small World,0.656,1.00,0.13
+Random,0.674,1.00,0.11

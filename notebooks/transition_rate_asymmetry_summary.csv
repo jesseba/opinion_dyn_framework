@@ -1,0 +1,4 @@
+Network Type,Critical Ratio(s),Max Supporter Advantage,Max Opposition Advantage
+Scale Free,0.99,0.733 at λs/λo = 10.00,0.745 at λs/λo = 0.10
+Small World,1.02,0.749 at λs/λo = 10.00,0.757 at λs/λo = 0.10
+Random,1.05,0.745 at λs/λo = 10.00,0.740 at λs/λo = 0.10

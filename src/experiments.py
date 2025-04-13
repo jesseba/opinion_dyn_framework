@@ -3,6 +3,7 @@ from tqdm import tqdm
 from model import OpinionDynamicsModel, SUPPORTER, UNDECIDED, OPPOSITION
 from networks import create_scale_free_network, create_small_world_network, create_random_network
 import matplotlib.pyplot as plt
+import networkx as nx
 
 def run_grassroots_vs_establishment_experiment(
     n_nodes=1000, 
@@ -657,6 +658,652 @@ def run_blitz_vs_sustained_experiment(
                             if np.std(post_peak) > 0:  # Avoid div by zero
                                 slope = np.polyfit(times, post_peak, 1)[0]
                                 results[network_name][pattern_name]['supporter_decay_rate'].append(slope)
+    
+    return results
+
+def run_critical_mass_experiment(
+    n_nodes=1000,
+    total_steps=100,
+    num_trials=5,
+    lambda_s=0.12,
+    lambda_o=0.12,
+    initial_supporter_range=np.linspace(0.05, 0.95, 19)
+):
+    """
+    Run experiment to test how the final state varies with different initial supporter proportions.
+    This experiment investigates critical mass effects in opinion dynamics.
+    
+    Parameters:
+    -----------
+    n_nodes : int
+        Number of nodes in each network
+    total_steps : int
+        Total simulation duration
+    num_trials : int
+        Number of simulation trials to run for each condition
+    lambda_s : float
+        Base rate of movement toward supporter state
+    lambda_o : float
+        Base rate of movement toward opposition state
+    initial_supporter_range : array-like
+        Range of initial supporter proportions to test
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing results of all simulations
+    """
+    # Network types to test
+    network_types = ['scale-free', 'small-world', 'random']
+    
+    # Store results
+    results = {
+        network_type: {
+            'initial_proportions': initial_supporter_range,
+            'final_supporters': [],
+            'final_supporters_std': [],
+            'final_undecided': [],
+            'final_undecided_std': [],
+            'final_opposition': [],
+            'final_opposition_std': [],
+            'trials': {p: [] for p in initial_supporter_range},  # Store individual trial results
+        } for network_type in network_types
+    }
+    
+    # Run simulations for each network type
+    for network_type in network_types:
+        print(f"Running critical mass simulations for {network_type} networks...")
+        
+        # For each initial supporter proportion
+        for init_proportion in tqdm(initial_supporter_range):
+            supporter_finals = []
+            undecided_finals = []
+            opposition_finals = []
+            
+            # Run multiple trials
+            for trial in range(num_trials):
+                # Create network
+                if network_type == 'scale-free':
+                    network = create_scale_free_network(n=n_nodes, m=3)
+                elif network_type == 'small-world':
+                    network = create_small_world_network(n=n_nodes, k=6, p=0.1)
+                else:  # random
+                    network = create_random_network(n=n_nodes, k=6)
+                
+                # Create initial states according to specified proportion
+                undecided_opposition_total = 1.0 - init_proportion
+                # Equal split between undecided and opposition from remaining proportion
+                undecided_prop = opposition_prop = undecided_opposition_total / 2
+                
+                initial_states = np.random.choice(
+                    [SUPPORTER, UNDECIDED, OPPOSITION], 
+                    size=n_nodes, 
+                    p=[init_proportion, undecided_prop, opposition_prop]
+                )
+                
+                # Create and run model without interventions
+                model = OpinionDynamicsModel(
+                    network=network,
+                    initial_states=initial_states,
+                    lambda_s=lambda_s,
+                    lambda_o=lambda_o
+                )
+                
+                # Run simulation without shocks
+                model.run(steps=total_steps)
+                
+                # Store results
+                final_props = model.get_opinion_proportions()
+                supporter_finals.append(final_props[SUPPORTER])
+                undecided_finals.append(final_props[UNDECIDED])
+                opposition_finals.append(final_props[OPPOSITION])
+                
+                # Store full trial data
+                results[network_type]['trials'][init_proportion].append({
+                    'final_supporters': final_props[SUPPORTER],
+                    'final_undecided': final_props[UNDECIDED],
+                    'final_opposition': final_props[OPPOSITION],
+                    'history': model.get_history_proportions() if trial == 0 else None  # Store history for first trial only
+                })
+            
+            # Calculate statistics across trials
+            results[network_type]['final_supporters'].append(np.mean(supporter_finals))
+            results[network_type]['final_supporters_std'].append(np.std(supporter_finals))
+            results[network_type]['final_undecided'].append(np.mean(undecided_finals))
+            results[network_type]['final_undecided_std'].append(np.std(undecided_finals))
+            results[network_type]['final_opposition'].append(np.mean(opposition_finals))
+            results[network_type]['final_opposition_std'].append(np.std(opposition_finals))
+    
+    return results
+
+def run_targeted_seeding_experiment(
+    n_nodes=1000, 
+    total_steps=100, 
+    num_trials=5,
+    lambda_s=0.12,
+    lambda_o=0.12,
+    initial_supporter_percent=0.15  # Lower percentage makes seeding strategy more important
+):
+    """
+    Run experiment comparing different seeding strategies for initial supporters.
+    
+    Parameters:
+    -----------
+    n_nodes : int
+        Number of nodes in each network
+    total_steps : int
+        Total simulation duration
+    num_trials : int
+        Number of simulation trials to run for each condition
+    lambda_s : float
+        Base rate of movement toward supporter state
+    lambda_o : float
+        Base rate of movement toward opposition state
+    initial_supporter_percent : float
+        Percentage of nodes that will be initial supporters
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing results of all simulations
+    """
+    # Network type - using scale-free for this experiment as it has clear hubs
+    network = create_scale_free_network(n=n_nodes, m=3)
+    
+    # Seeding strategies to compare
+    strategies = {
+        'Random Seeding': 'random',
+        'High-Degree Seeding': 'high_degree',
+        'Betweenness Seeding': 'betweenness',
+        'Clustered Seeding': 'clustered'
+    }
+    
+    # Store results
+    results = {
+        strategy: {
+            'supporter_final': [],
+            'undecided_final': [],
+            'opposition_final': [],
+            'history': [],
+            'all_histories': []
+        } for strategy in strategies
+    }
+    
+    # Calculate centrality measures once for efficiency
+    degree_dict = dict(network.degree())
+    betweenness_dict = nx.betweenness_centrality(network)
+    
+    # Get community structure for clustered seeding
+    communities = list(nx.algorithms.community.greedy_modularity_communities(network))
+    
+    # Number of initial supporters
+    n_supporters = int(n_nodes * initial_supporter_percent)
+    
+    # Run simulations
+    for strategy_name, strategy_type in strategies.items():
+        print(f"Running simulations for {strategy_name}...")
+        
+        for trial in tqdm(range(num_trials)):
+            # Create initial states - everyone starts as undecided
+            initial_states = np.full(n_nodes, UNDECIDED)
+            
+            # Apply seeding strategy
+            if strategy_type == 'random':
+                # Random seeding
+                supporter_indices = np.random.choice(n_nodes, size=n_supporters, replace=False)
+            
+            elif strategy_type == 'high_degree':
+                # High-degree seeding
+                sorted_nodes = sorted(range(n_nodes), key=lambda i: degree_dict[i], reverse=True)
+                supporter_indices = sorted_nodes[:n_supporters]
+                
+            elif strategy_type == 'betweenness':
+                # Betweenness centrality seeding
+                sorted_nodes = sorted(range(n_nodes), key=lambda i: betweenness_dict[i], reverse=True)
+                supporter_indices = sorted_nodes[:n_supporters]
+                
+            elif strategy_type == 'clustered':
+                # Clustered seeding - pick top nodes from each community
+                supporter_indices = []
+                # Determine how many supporters to place in each community (proportional to size)
+                for community in communities:
+                    community = list(community)
+                    n_community_supporters = max(1, int(len(community) * initial_supporter_percent))
+                    # Sort community by degree
+                    sorted_community = sorted(community, key=lambda i: degree_dict[i], reverse=True)
+                    # Take top nodes from this community
+                    supporter_indices.extend(sorted_community[:n_community_supporters])
+                
+                # If we've selected too many, trim the list
+                if len(supporter_indices) > n_supporters:
+                    supporter_indices = supporter_indices[:n_supporters]
+                # If we need more, add random nodes
+                elif len(supporter_indices) < n_supporters:
+                    remaining = n_supporters - len(supporter_indices)
+                    eligible = [i for i in range(n_nodes) if i not in supporter_indices]
+                    additional = np.random.choice(eligible, size=remaining, replace=False)
+                    supporter_indices.extend(additional)
+            
+            # Set the selected nodes as supporters
+            initial_states[supporter_indices] = SUPPORTER
+            
+            # Add some opposition nodes - randomly distributed
+            n_opposition = int(n_nodes * initial_supporter_percent)  # Same percentage as supporters
+            eligible = [i for i in range(n_nodes) if initial_states[i] == UNDECIDED]
+            opposition_indices = np.random.choice(eligible, size=n_opposition, replace=False)
+            initial_states[opposition_indices] = OPPOSITION
+            
+            # Create model
+            model = OpinionDynamicsModel(
+                network=network.copy(),  # Use same network but make copy
+                initial_states=initial_states,
+                lambda_s=lambda_s,
+                lambda_o=lambda_o
+            )
+            
+            # Run simulation without interventions
+            model.run(steps=total_steps)
+            
+            # Store results
+            final_props = model.get_opinion_proportions()
+            results[strategy_name]['supporter_final'].append(final_props[SUPPORTER])
+            results[strategy_name]['undecided_final'].append(final_props[UNDECIDED])
+            results[strategy_name]['opposition_final'].append(final_props[OPPOSITION])
+            
+            # Store history
+            history = model.get_history_proportions()
+            results[strategy_name]['all_histories'].append(history)
+            
+            # Store representative history
+            if trial == 0:
+                results[strategy_name]['history'] = history
+    
+    return results
+
+def run_opponent_composition_experiment(
+    n_nodes=1000, 
+    total_steps=100, 
+    num_trials=5,
+    lambda_s=0.12,
+    lambda_o=0.12,
+    initial_supporter_percent=0.3,
+    undecided_ratio_range=np.linspace(0.0, 1.0, 11)  # 0 to 1 in steps of 0.1
+):
+    """
+    Run experiment varying the composition of the non-supporter population.
+    
+    Parameters:
+    -----------
+    n_nodes : int
+        Number of nodes in each network
+    total_steps : int
+        Total simulation duration
+    num_trials : int
+        Number of simulation trials to run for each condition
+    lambda_s : float
+        Base rate of movement toward supporter state
+    lambda_o : float
+        Base rate of movement toward opposition state
+    initial_supporter_percent : float
+        Fixed percentage of initial supporters
+    undecided_ratio_range : array-like
+        Range of ratios for undecided within the non-supporter population
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing results of all simulations
+    """
+    # Network types to test
+    network_types = ['scale-free', 'small-world', 'random']
+    
+    # Store results
+    results = {
+        network_type: {
+            'undecided_ratios': undecided_ratio_range,
+            'supporter_final': [],
+            'undecided_final': [],
+            'opposition_final': [],
+            'all_trials': {}  # Store individual trial results
+        } for network_type in network_types
+    }
+    
+    # Run simulations
+    for network_type in network_types:
+        print(f"Running simulations for {network_type} networks...")
+        
+        for undecided_ratio in tqdm(undecided_ratio_range):
+            supporter_finals = []
+            undecided_finals = []
+            opposition_finals = []
+            results[network_type]['all_trials'][undecided_ratio] = []
+            
+            # Calculate exact proportions
+            # - Fixed initial supporters
+            # - Remaining split between undecided and opposition based on ratio
+            non_supporter_percent = 1.0 - initial_supporter_percent
+            undecided_percent = non_supporter_percent * undecided_ratio
+            opposition_percent = non_supporter_percent * (1 - undecided_ratio)
+            
+            for trial in range(num_trials):
+                # Create network
+                if network_type == 'scale-free':
+                    network = create_scale_free_network(n=n_nodes, m=3)
+                elif network_type == 'small-world':
+                    network = create_small_world_network(n=n_nodes, k=6, p=0.1)
+                else:  # random
+                    network = create_random_network(n=n_nodes, k=6)
+                
+                # Create initial states
+                initial_states = np.random.choice(
+                    [SUPPORTER, UNDECIDED, OPPOSITION], 
+                    size=n_nodes, 
+                    p=[initial_supporter_percent, undecided_percent, opposition_percent]
+                )
+                
+                # Create and run model
+                model = OpinionDynamicsModel(
+                    network=network,
+                    initial_states=initial_states,
+                    lambda_s=lambda_s,
+                    lambda_o=lambda_o
+                )
+                
+                # Run simulation
+                model.run(steps=total_steps)
+                
+                # Store results
+                final_props = model.get_opinion_proportions()
+                supporter_finals.append(final_props[SUPPORTER])
+                undecided_finals.append(final_props[UNDECIDED])
+                opposition_finals.append(final_props[OPPOSITION])
+                
+                # Store full trial data
+                results[network_type]['all_trials'][undecided_ratio].append({
+                    'final_supporters': final_props[SUPPORTER],
+                    'final_undecided': final_props[UNDECIDED],
+                    'final_opposition': final_props[OPPOSITION],
+                    'history': model.get_history_proportions() if trial == 0 else None
+                })
+            
+            # Calculate statistics across trials
+            results[network_type]['supporter_final'].append(np.mean(supporter_finals))
+            results[network_type]['undecided_final'].append(np.mean(undecided_finals))
+            results[network_type]['opposition_final'].append(np.mean(opposition_finals))
+    
+    return results
+
+def run_transition_rate_asymmetry_experiment(
+    n_nodes=1000,
+    total_steps=100,
+    num_trials=5,
+    lambda_base=0.12,
+    lambda_ratios=np.logspace(-1, 1, 11),  # 0.1 to 10 in log space
+    initial_proportions=[0.3, 0.4, 0.3]  # [supporter, undecided, opposition]
+):
+    """
+    Run experiment varying the asymmetry between supporter and opposition transition rates.
+    
+    Parameters:
+    -----------
+    n_nodes : int
+        Number of nodes in each network
+    total_steps : int
+        Total simulation duration
+    num_trials : int
+        Number of simulation trials to run for each condition
+    lambda_base : float
+        Base transition rate
+    lambda_ratios : array-like
+        Range of λs/λo ratios to test
+    initial_proportions : list
+        Initial distribution of [supporter, undecided, opposition]
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing results of all simulations
+    """
+    # Network types to test
+    network_types = ['scale-free', 'small-world', 'random']
+    
+    # Store results
+    results = {
+        network_type: {
+            'lambda_ratios': lambda_ratios,
+            'supporter_final': [],
+            'undecided_final': [],
+            'opposition_final': [],
+            'supporter_advantage': [],  # Difference between final supporter and opposition proportions
+            'all_trials': {}  # Store individual trial results
+        } for network_type in network_types
+    }
+    
+    # Run simulations
+    for network_type in network_types:
+        print(f"Running simulations for {network_type} networks...")
+        
+        for ratio in tqdm(lambda_ratios):
+            # Calculate transition rates based on ratio
+            lambda_s = lambda_base * np.sqrt(ratio)  # Increases with ratio
+            lambda_o = lambda_base / np.sqrt(ratio)  # Decreases with ratio
+            # This ensures λs * λo = constant to maintain overall transition rate
+            
+            supporter_finals = []
+            undecided_finals = []
+            opposition_finals = []
+            results[network_type]['all_trials'][ratio] = []
+            
+            for trial in range(num_trials):
+                # Create network
+                if network_type == 'scale-free':
+                    network = create_scale_free_network(n=n_nodes, m=3)
+                elif network_type == 'small-world':
+                    network = create_small_world_network(n=n_nodes, k=6, p=0.1)
+                else:  # random
+                    network = create_random_network(n=n_nodes, k=6)
+                
+                # Create initial states
+                initial_states = np.random.choice(
+                    [SUPPORTER, UNDECIDED, OPPOSITION], 
+                    size=n_nodes, 
+                    p=initial_proportions
+                )
+                
+                # Create and run model
+                model = OpinionDynamicsModel(
+                    network=network,
+                    initial_states=initial_states,
+                    lambda_s=lambda_s,
+                    lambda_o=lambda_o
+                )
+                
+                # Run simulation
+                model.run(steps=total_steps)
+                
+                # Store results
+                final_props = model.get_opinion_proportions()
+                supporter_finals.append(final_props[SUPPORTER])
+                undecided_finals.append(final_props[UNDECIDED])
+                opposition_finals.append(final_props[OPPOSITION])
+                
+                # Store full trial data
+                results[network_type]['all_trials'][ratio].append({
+                    'final_supporters': final_props[SUPPORTER],
+                    'final_undecided': final_props[UNDECIDED],
+                    'final_opposition': final_props[OPPOSITION],
+                    'history': model.get_history_proportions() if trial == 0 else None
+                })
+            
+            # Calculate statistics across trials
+            results[network_type]['supporter_final'].append(np.mean(supporter_finals))
+            results[network_type]['undecided_final'].append(np.mean(undecided_finals))
+            results[network_type]['opposition_final'].append(np.mean(opposition_finals))
+            results[network_type]['supporter_advantage'].append(
+                np.mean(supporter_finals) - np.mean(opposition_finals)
+            )
+    
+    return results
+
+def run_intervention_sensitivity_experiment(
+    n_nodes=1000,
+    shock_duration=20,
+    total_steps=100,
+    num_trials=5,
+    lambda_s=0.12,
+    lambda_o=0.12,
+    initial_supporter_range=np.linspace(0.05, 0.95, 10),
+    intervention_type='establishment'  # 'establishment' or 'grassroots'
+):
+    """
+    Run experiment testing how intervention effectiveness varies with initial supporter levels.
+    
+    Parameters:
+    -----------
+    n_nodes : int
+        Number of nodes in each network
+    shock_duration : int
+        Duration of shock in time steps
+    total_steps : int
+        Total simulation duration
+    num_trials : int
+        Number of simulation trials to run for each condition
+    lambda_s : float
+        Base rate of movement toward supporter state
+    lambda_o : float
+        Base rate of movement toward opposition state
+    initial_supporter_range : array-like
+        Range of initial supporter proportions to test
+    intervention_type : str
+        Type of intervention strategy to use ('establishment' or 'grassroots')
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing results of all simulations
+    """
+    # Network type - using scale-free for this experiment
+    network_type = 'scale-free'
+    
+    # Set up intervention parameters based on type
+    if intervention_type == 'establishment':
+        intervention_func_name = 'apply_targeted_shock_high_degree'
+        intervention_params = {'top_percent': 0.05, 'lambda_s_factor': 5.0}
+    else:  # grassroots
+        intervention_func_name = 'apply_targeted_shock_random'
+        intervention_params = {'target_percent': 0.25, 'lambda_s_factor': 3.0}
+    
+    # Store results
+    results = {
+        'initial_proportions': initial_supporter_range,
+        'intervention_type': intervention_type,
+        'baseline_final_supporters': [],  # No intervention
+        'baseline_final_supporters_std': [],
+        'intervention_final_supporters': [],  # With intervention
+        'intervention_final_supporters_std': [],
+        'supporter_gain': [],  # Difference between intervention and baseline
+        'supporter_gain_std': [],
+        'relative_gain': [],  # Gain divided by initial proportion
+        'relative_gain_std': [],
+        'trials': {p: {'baseline': [], 'intervention': []} for p in initial_supporter_range}
+    }
+    
+    print(f"Running intervention sensitivity experiment with {intervention_type} strategy...")
+    
+    # For each initial supporter proportion
+    for init_proportion in tqdm(initial_supporter_range):
+        baseline_supporters = []
+        intervention_supporters = []
+        
+        # Run multiple trials
+        for trial in range(num_trials):
+            # Create network
+            network = create_scale_free_network(n=n_nodes, m=3)
+            
+            # Create initial states according to specified proportion
+            undecided_opposition_total = 1.0 - init_proportion
+            # Equal split between undecided and opposition from remaining proportion
+            undecided_prop = opposition_prop = undecided_opposition_total / 2
+            
+            initial_states = np.random.choice(
+                [SUPPORTER, UNDECIDED, OPPOSITION], 
+                size=n_nodes, 
+                p=[init_proportion, undecided_prop, opposition_prop]
+            )
+            
+            # BASELINE: Run without intervention
+            baseline_model = OpinionDynamicsModel(
+                network=network.copy(),
+                initial_states=initial_states.copy(),
+                lambda_s=lambda_s,
+                lambda_o=lambda_o
+            )
+            baseline_model.run(steps=total_steps)
+            baseline_final = baseline_model.get_opinion_proportions()
+            baseline_supporters.append(baseline_final[SUPPORTER])
+            
+            # INTERVENTION: Run with specified intervention
+            intervention_model = OpinionDynamicsModel(
+                network=network.copy(),
+                initial_states=initial_states.copy(),
+                lambda_s=lambda_s,
+                lambda_o=lambda_o
+            )
+            
+            # Set up intervention
+            shock_func = getattr(intervention_model, intervention_func_name)
+            
+            # Run with intervention
+            intervention_model.run(
+                steps=total_steps,
+                shock_start=10,
+                shock_end=10 + shock_duration,
+                shock_func=shock_func,
+                shock_params=intervention_params
+            )
+            
+            intervention_final = intervention_model.get_opinion_proportions()
+            intervention_supporters.append(intervention_final[SUPPORTER])
+            
+            # Store full trial data 
+            results['trials'][init_proportion]['baseline'].append({
+                'final_supporters': baseline_final[SUPPORTER],
+                'final_undecided': baseline_final[UNDECIDED],
+                'final_opposition': baseline_final[OPPOSITION],
+                'history': baseline_model.get_history_proportions() if trial == 0 else None
+            })
+            
+            results['trials'][init_proportion]['intervention'].append({
+                'final_supporters': intervention_final[SUPPORTER],
+                'final_undecided': intervention_final[UNDECIDED],
+                'final_opposition': intervention_final[OPPOSITION],
+                'history': intervention_model.get_history_proportions() if trial == 0 else None
+            })
+        
+        # Calculate statistics across trials
+        baseline_mean = np.mean(baseline_supporters)
+        baseline_std = np.std(baseline_supporters)
+        intervention_mean = np.mean(intervention_supporters)
+        intervention_std = np.std(intervention_supporters)
+        
+        # Calculate absolute gain
+        gain = intervention_mean - baseline_mean
+        # Compute combined standard deviation using error propagation
+        gain_std = np.sqrt(baseline_std**2 + intervention_std**2)
+        
+        # Calculate relative gain (normalized by initial proportion)
+        relative_gain = gain / max(0.01, init_proportion)  # Avoid division by zero
+        relative_gain_std = gain_std / max(0.01, init_proportion)
+        
+        # Store results
+        results['baseline_final_supporters'].append(baseline_mean)
+        results['baseline_final_supporters_std'].append(baseline_std)
+        results['intervention_final_supporters'].append(intervention_mean)
+        results['intervention_final_supporters_std'].append(intervention_std)
+        results['supporter_gain'].append(gain)
+        results['supporter_gain_std'].append(gain_std)
+        results['relative_gain'].append(relative_gain)
+        results['relative_gain_std'].append(relative_gain_std)
     
     return results
 
